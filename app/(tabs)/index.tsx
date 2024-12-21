@@ -10,8 +10,8 @@ interface Person {
   name: string;
   schedule: {
     [key: string]: {
-      status?: 'full' | 'half' | 'none';
-      overtime?: boolean;
+      status: 'full' | 'half' | 'none';
+      overtime: boolean;
       overtimeValue?: number;
     };
   };
@@ -371,12 +371,74 @@ export default function TabOneScreen() {
     });
   };
 
+  // Personel silme fonksiyonu ekle
+  const handleDeletePerson = (personId: number, personName: string) => {
+    Alert.alert(
+      "Personel Sil",
+      `${personName} isimli personeli silmek istediğinize emin misiniz?`,
+      [
+        {
+          text: "İptal",
+          style: "cancel"
+        },
+        {
+          text: "Sil",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              // Mevcut listeden personeli kaldır
+              const updatedPeople = people.filter(p => p.id !== personId);
+              setPeople(updatedPeople);
+              
+              // AsyncStorage'ı güncelle
+              await AsyncStorage.setItem('people', JSON.stringify(updatedPeople));
+              
+              // Başarı mesajı göster
+              //Alert.alert('Başarılı', 'Personel başarıyla silindi.');
+            } catch (error) {
+              console.error('Personel silme hatası:', error);
+              Alert.alert('Hata', 'Personel silinirken bir hata oluştu.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleQuickOvertimeSelect = (value: string) => {
+    setOvertimeValue(value);
+    if (selectedCell) {
+      setPeople(prevPeople => {
+        return prevPeople.map(person => {
+          if (person.id === selectedCell.personId) {
+            const newSchedule = {
+              ...person.schedule,
+              [`${currentWeek}-${selectedCell.day}`]: { 
+                status: 'full' as const,
+                overtime: true,
+                overtimeValue: parseFloat(value)
+              }
+            };
+
+            return {
+              ...person,
+              schedule: newSchedule
+            };
+          }
+          return person;
+        });
+      });
+      setAttendanceModalVisible(false);
+      setSelectedCell(null);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <Text style={styles.title}>Hafta {currentWeek}</Text>
-          <Text style={styles.versionText}>v1.0.0</Text>
+          <Text style={styles.versionText}>v2.0.0</Text>
         </View>
         <View style={styles.buttonContainer}>
           <TouchableOpacity 
@@ -433,7 +495,8 @@ export default function TabOneScreen() {
                 <View key={person.id} style={styles.row}>
                   <TouchableOpacity
                     style={[styles.cell, styles.nameCell, { width: nameCellWidth }]}
-                    onLongPress={() => handleLongPress(person.id, 'none')}
+                    onLongPress={() => handleDeletePerson(person.id, person.name)}
+                    delayLongPress={500}
                   >
                     <Text style={styles.nameText} numberOfLines={1} ellipsizeMode="tail">{person.name}</Text>
                   </TouchableOpacity>
@@ -578,6 +641,26 @@ export default function TabOneScreen() {
                     keyboardType="numeric"
                     placeholder="1.0"
                   />
+                </View>
+                <View style={styles.quickOvertimeButtons}>
+                  <TouchableOpacity
+                    style={styles.quickOvertimeButton}
+                    onPress={() => handleQuickOvertimeSelect('0.5')}
+                  >
+                    <Text style={styles.quickOvertimeButtonText}>0.5</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.quickOvertimeButton}
+                    onPress={() => handleQuickOvertimeSelect('1')}
+                  >
+                    <Text style={styles.quickOvertimeButtonText}>1</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.quickOvertimeButton}
+                    onPress={() => handleQuickOvertimeSelect('2')}
+                  >
+                    <Text style={styles.quickOvertimeButtonText}>2</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
 
@@ -938,5 +1021,24 @@ const styles = StyleSheet.create({
       padding: 5,
       width: 60,
       textAlign: 'center'
-    }
+    },
+    quickOvertimeButtons: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginTop: 10,
+    },
+    quickOvertimeButton: {
+      flex: 1,
+      backgroundColor: '#007bff',
+      padding: 10,
+      borderRadius: 8,
+      marginHorizontal: 5,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    quickOvertimeButtonText: {
+      color: '#fff',
+      fontSize: 16,
+      fontWeight: '600',
+    },
   });

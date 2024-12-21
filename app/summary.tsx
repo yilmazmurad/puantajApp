@@ -1,11 +1,12 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Share, Platform, Modal, TextInput } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { captureRef } from 'react-native-view-shot';
 import { useRef, useEffect } from 'react';
 import RNHTMLtoPDF from 'react-native-html-to-pdf';
 import RNFS from 'react-native-fs';
 import { useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import RNFetchBlob from 'rn-fetch-blob';
+import RNShare from 'react-native-share';
 
 interface Person {
   id: number;
@@ -90,118 +91,110 @@ export default function SummaryScreen() {
     return weekTotal;
   };
 
-  const handleShare = async () => {
-    if (!summaryRef.current) {
-      console.error('View reference not found');
-      return;
-    }
+  const generateHTMLContent = () => {
+    return `
+      <html>
+        <head>
+          <style>
+            table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+            th, td { border: 1px solid #dee2e6; padding: 8px; text-align: center; }
+            th { background-color: #f8f9fa; }
+            .name-cell { text-align: left; }
+            .total-cell { background-color: #e9ecef; }
+            .overtime { color: #ff6b00; font-size: 10px; }
+            .section-title { font-size: 18px; margin: 20px 0 10px 0; }
+            .expense-table { margin-top: 30px; }
+            .expense-total { color: #28a745; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h2>${currentWeek}. Hafta Puantaj Özeti</h2>
+          
+          <!-- Personel Puantaj Tablosu -->
+          <div class="section-title">Personel Puantaj Özeti</div>
+          <table>
+            <tr>
+              <th class="name-cell">İsim</th>
+              ${DAYS.map(day => `<th>${day}</th>`).join('')}
+              <th>Toplam</th>
+            </tr>
+            ${people.map(person => {
+              const weekTotal = renderWeekTotal(person, currentWeek);
+              return `
+                <tr>
+                  <td class="name-cell">${person.name}</td>
+                  ${DAYS.map(day => {
+                    const dayDetails = calculateDayDetails(person, day);
+                    return `<td>
+                      ${dayDetails.status === 'full' ? '1' : 
+                        dayDetails.status === 'half' ? '0.5' : '-'}
+                      ${dayDetails.overtime ? 
+                        `<span class="overtime">+${dayDetails.overtimeValue}</span>` : ''}
+                    </td>`;
+                  }).join('')}
+                  <td class="total-cell">${weekTotal.toFixed(1)}</td>
+                </tr>
+              `;
+            }).join('')}
+          </table>
 
-    try {
-      // Önce bir kısa bekleme ekleyelim
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      const uri = await captureRef(summaryRef, {
-        format: 'png',
-        quality: 1,
-        result: 'tmpfile'
-      });
-      
-      await Share.share({
-        url: uri,
-      });
-    } catch (error) {
-      console.error('Paylaşım hatası:', error);
-      Alert.alert('Hata', 'Ekran görüntüsü alınırken bir hata oluştu.');
-    }
+          <!-- Giderler Tablosu -->
+          <div class="section-title">Giderler Özeti</div>
+          <table class="expense-table">
+            <tr>
+              <th>Açıklama</th>
+              <th>Gün</th>
+              <th>Tutar</th>
+            </tr>
+            ${weekData.expenses.map(expense => `
+              <tr>
+                <td>${expense.description}</td>
+                <td>${expense.day}</td>
+                <td>${formatCurrency(expense.amount)}</td>
+              </tr>
+            `).join('')}
+            <tr>
+              <td colspan="2" class="total-cell">Toplam Gider</td>
+              <td class="total-cell expense-total">${formatCurrency(totalExpenseAmount)}</td>
+            </tr>
+          </table>
+        </body>
+      </html>
+    `;
   };
 
-  const createPDF = async () => {
+  const handleShare = async () => {
     try {
-      let htmlContent = `
-        <html>
-          <head>
-            <style>
-              table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-              th, td { border: 1px solid #dee2e6; padding: 8px; text-align: center; }
-              th { background-color: #f8f9fa; }
-              .name-cell { text-align: left; }
-              .total-cell { background-color: #e9ecef; }
-              .overtime { color: #ff6b00; font-size: 10px; }
-              .section-title { font-size: 18px; margin: 20px 0 10px 0; }
-              .expense-table { margin-top: 30px; }
-              .expense-total { color: #28a745; font-weight: bold; }
-            </style>
-          </head>
-          <body>
-            <h2>${currentWeek}. Hafta Puantaj Özeti</h2>
-            
-            <!-- Personel Puantaj Tablosu -->
-            <div class="section-title">Personel Puantaj Özeti</div>
-            <table>
-              <tr>
-                <th class="name-cell">İsim</th>
-                ${DAYS.map(day => `<th>${day}</th>`).join('')}
-                <th>Toplam</th>
-              </tr>
-              ${people.map(person => {
-                const weekTotal = renderWeekTotal(person, currentWeek);
-                return `
-                  <tr>
-                    <td class="name-cell">${person.name}</td>
-                    ${DAYS.map(day => {
-                      const dayDetails = calculateDayDetails(person, day);
-                      return `<td>
-                        ${dayDetails.status === 'full' ? '1' : 
-                          dayDetails.status === 'half' ? '0.5' : '-'}
-                        ${dayDetails.overtime ? 
-                          `<span class="overtime">+${dayDetails.overtimeValue}</span>` : ''}
-                      </td>`;
-                    }).join('')}
-                    <td class="total-cell">${weekTotal.toFixed(1)}</td>
-                  </tr>
-                `;
-              }).join('')}
-            </table>
-
-            <!-- Giderler Tablosu -->
-            <div class="section-title">Giderler Özeti</div>
-            <table class="expense-table">
-              <tr>
-                <th>Açıklama</th>
-                <th>Gün</th>
-                <th>Tutar</th>
-              </tr>
-              ${weekData.expenses.map(expense => `
-                <tr>
-                  <td>${expense.description}</td>
-                  <td>${expense.day}</td>
-                  <td>${expense.amount.toFixed(2)} ₺</td>
-                </tr>
-              `).join('')}
-              <tr>
-                <td colspan="2" class="total-cell">Toplam Gider</td>
-                <td class="total-cell expense-total">${totalExpenseAmount.toFixed(2)} ₺</td>
-              </tr>
-            </table>
-          </body>
-        </html>
-      `;
+      const htmlContent = generateHTMLContent();
 
       // PDF oluştur
       const file = await RNHTMLtoPDF.convert({
         html: htmlContent,
         fileName: `Puantaj_Hafta_${currentWeek}`,
-        width: 842,
-        height: 595,
+        base64: true,
       });
 
-      // PDF'i paylaş
       if (file.filePath) {
-        await Share.share({
-          url: `file://${file.filePath}`,
-          title: `Puantaj Hafta ${currentWeek}`,
-          message: `${currentWeek}. Hafta Puantaj Özeti`
-        });
+        const newPath = `${RNFetchBlob.fs.dirs.CacheDir}/Puantaj_Hafta_${currentWeek}.pdf`;
+
+        await RNFetchBlob.fs.cp(file.filePath, newPath);
+
+        const shareOptions = {
+          title: `${currentWeek}. Hafta Puantaj Özeti`,
+          subject: `${currentWeek}. Hafta Puantaj Özeti`,
+          message: `${currentWeek}. Hafta Puantaj Özeti`,
+          url: `file://${newPath}`,
+          type: 'application/pdf',
+          failOnCancel: true,
+        };
+
+        try {
+          await RNShare.open(shareOptions);
+        } catch (err) {
+          console.error('Paylaşım hatası:', err);
+        } finally {
+          RNFetchBlob.fs.unlink(newPath);
+        }
       }
     } catch (error) {
       console.error('PDF oluşturma hatası:', error);
@@ -211,82 +204,13 @@ export default function SummaryScreen() {
 
   const savePDF = async () => {
     try {
-      let htmlContent = `
-        <html>
-          <head>
-            <style>
-              table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-              th, td { border: 1px solid #dee2e6; padding: 8px; text-align: center; }
-              th { background-color: #f8f9fa; }
-              .name-cell { text-align: left; }
-              .total-cell { background-color: #e9ecef; }
-              .overtime { color: #ff6b00; font-size: 10px; }
-              .section-title { font-size: 18px; margin: 20px 0 10px 0; }
-              .expense-table { margin-top: 30px; }
-              .expense-total { color: #28a745; font-weight: bold; }
-            </style>
-          </head>
-          <body>
-            <h2>${currentWeek}. Hafta Puantaj Özeti</h2>
-            
-            <!-- Personel Puantaj Tablosu -->
-            <div class="section-title">Personel Puantaj Özeti</div>
-            <table>
-              <tr>
-                <th class="name-cell">İsim</th>
-                ${DAYS.map(day => `<th>${day}</th>`).join('')}
-                <th>Toplam</th>
-              </tr>
-              ${people.map(person => {
-                const weekTotal = renderWeekTotal(person, currentWeek);
-                return `
-                  <tr>
-                    <td class="name-cell">${person.name}</td>
-                    ${DAYS.map(day => {
-                      const dayDetails = calculateDayDetails(person, day);
-                      return `<td>
-                        ${dayDetails.status === 'full' ? '1' : 
-                          dayDetails.status === 'half' ? '0.5' : '-'}
-                        ${dayDetails.overtime ? 
-                          `<span class="overtime">+${dayDetails.overtimeValue}</span>` : ''}
-                      </td>`;
-                    }).join('')}
-                    <td class="total-cell">${weekTotal.toFixed(1)}</td>
-                  </tr>
-                `;
-              }).join('')}
-            </table>
-
-            <!-- Giderler Tablosu -->
-            <div class="section-title">Giderler Özeti</div>
-            <table class="expense-table">
-              <tr>
-                <th>Açıklama</th>
-                <th>Gün</th>
-                <th>Tutar</th>
-              </tr>
-              ${weekData.expenses.map(expense => `
-                <tr>
-                  <td>${expense.description}</td>
-                  <td>${expense.day}</td>
-                  <td>${expense.amount.toFixed(2)} ₺</td>
-                </tr>
-              `).join('')}
-              <tr>
-                <td colspan="2" class="total-cell">Toplam Gider</td>
-                <td class="total-cell expense-total">${totalExpenseAmount.toFixed(2)} ₺</td>
-              </tr>
-            </table>
-          </body>
-        </html>
-      `;
+      const htmlContent = generateHTMLContent();
 
       // PDF oluştur
       const file = await RNHTMLtoPDF.convert({
         html: htmlContent,
         fileName: `Puantaj_Hafta_${currentWeek}`,
-        width: 842,
-        height: 595,
+        base64: true,
       });
 
       if (file.filePath) {
@@ -300,8 +224,12 @@ export default function SummaryScreen() {
           throw new Error('Platform desteklenmiyor');
         }
 
+        if (!file.base64) {
+          throw new Error('PDF verisi oluşturulamadı');
+        }
+
         // Dosyayı kopyala
-        await RNFS.copyFile(file.filePath, downloadPath);
+        await RNFS.writeFile(downloadPath, file.base64, 'base64');
 
         Alert.alert(
           'Başarılı',
@@ -314,6 +242,10 @@ export default function SummaryScreen() {
       console.error('PDF kaydetme hatası:', error);
       Alert.alert('Hata', 'PDF kaydedilirken bir hata oluştu.');
     }
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(amount);
   };
 
   return (
@@ -334,7 +266,7 @@ export default function SummaryScreen() {
         </View>
         <View style={styles.headerButtons}>
           <TouchableOpacity 
-            onPress={createPDF} 
+            onPress={handleShare} 
             style={[styles.actionButton, { backgroundColor: '#28a745', marginRight: 8 }]}
           >
             <Text style={styles.actionButtonText}>Paylaş</Text>
@@ -427,7 +359,7 @@ export default function SummaryScreen() {
                     <Text style={styles.tableCellText}>{expense.day}</Text>
                   </View>
                   <View style={[styles.tableCell, styles.totalCell]}>
-                    <Text style={styles.tableCellText}>{expense.amount.toFixed(2)} ₺</Text>
+                    <Text style={styles.tableCellText}>{formatCurrency(expense.amount)}</Text>
                   </View>
                 </View>
               ))}
@@ -439,7 +371,7 @@ export default function SummaryScreen() {
                 <View style={styles.tableCell} />
                 <View style={[styles.tableCell, styles.totalCell]}>
                   <Text style={[styles.totalText, { color: '#28a745' }]}>
-                    {totalExpenseAmount.toFixed(2)} ₺
+                    {formatCurrency(totalExpenseAmount)}
                   </Text>
                 </View>
               </View>
@@ -465,7 +397,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    padding: 40,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',

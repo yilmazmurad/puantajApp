@@ -189,6 +189,10 @@ export default function ExpensesScreen() {
     );
   };
 
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(amount);
+  };
+
   return (
     <View style={styles.container}>
       {/* Stack.Screen ile varsayılan header'ı gizle */}
@@ -290,7 +294,7 @@ export default function ExpensesScreen() {
 
       <View style={styles.totalContainer}>
         <Text style={styles.totalLabel}>Toplam Tutar:</Text>
-        <Text style={styles.totalAmount}>{totalAmount.toFixed(2)} ₺</Text>
+        <Text style={styles.totalAmount}>{formatCurrency(totalAmount)}</Text>
       </View>
 
       <ScrollView style={styles.content}>
@@ -301,7 +305,7 @@ export default function ExpensesScreen() {
               <View key={expense.id} style={styles.expenseItem}>
                 <View style={styles.expenseInfo}>
                   <Text style={styles.expenseDescription}>{expense.description}</Text>
-                  <Text style={styles.expenseAmount}>{expense.amount.toFixed(2)} ₺</Text>
+                  <Text style={styles.expenseAmount}>{formatCurrency(expense.amount)}</Text>
                 </View>
                 <TouchableOpacity 
                   onPress={() => handleDeleteExpense(expense.id)}
@@ -326,7 +330,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    padding: 40,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
