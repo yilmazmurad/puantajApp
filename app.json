@@ -17,7 +17,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yourcompany.puantajtakip"
+      "bundleIdentifier": "com.ylmzmrt.puantajtakip"
     },
     "android": {
       "adaptiveIcon": {
@@ -25,7 +25,7 @@
         "backgroundImage": "./logolar/mipmap-xxxhdpi/ic_launcher_adaptive_back.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.yourcompany.puantajtakip",
+      "package": "com.ylmzmrt.puantajtakip",
       "minSdkVersion": 21,
       "targetSdkVersion": 33
     },
